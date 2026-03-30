@@ -17,7 +17,7 @@ const config = {
   pool: {
     max: 10,
     min: 0,
-    idleTimeoutMillis: 30000,
+    idleTimeoutMillis: 30000,   
   },
   options: {
     encrypt: String(process.env.DB_ENCRYPT).toLowerCase() === 'true',
@@ -27,6 +27,30 @@ const config = {
 };
 
 let pool;
+let schemaEnsured = false;
+
+async function ensureSchema(activePool) {
+  if (schemaEnsured) {
+    return;
+  }
+
+  await activePool.request().query(`
+    IF OBJECT_ID('pagos_prestamo', 'U') IS NULL
+    BEGIN
+      CREATE TABLE pagos_prestamo (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        prestamo_id INT NOT NULL,
+        monto DECIMAL(18,2) NOT NULL,
+        observacion NVARCHAR(255) NULL,
+        fecha_pago DATETIME NOT NULL DEFAULT GETDATE(),
+        CONSTRAINT FK_pagos_prestamo_prestamo
+          FOREIGN KEY (prestamo_id) REFERENCES prestamos(id)
+      );
+    END
+  `);
+
+  schemaEnsured = true;
+}
 
 async function getPool() {
   if (pool) {
@@ -34,6 +58,7 @@ async function getPool() {
   }
 
   pool = await sql.connect(config);
+  await ensureSchema(pool);
   return pool;
 }
 
